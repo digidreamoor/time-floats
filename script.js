@@ -10,22 +10,23 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// Bubble class with spawn animation
+// Bubble class
 class Bubble {
-    constructor(x, y, radius, color, type) {
+    constructor(x, y, baseRadius, color, type) {
         this.x = x;
         this.y = y;
-        this.baseRadius = radius; // Final target size
-        this.radius = 0; // Start at 0% for animation
+        this.baseRadius = baseRadius; // Target radius before animation
+        this.currentBaseRadius = baseRadius; // Current radius for scaling
+        this.radius = 0; // Start at 0 for animation
         this.color = color;
         this.type = type;
         this.velocity = {
             x: (Math.random() - 0.5) * 0.5,
             y: (Math.random() - 0.5) * 0.5
         };
-        this.spawnTime = Date.now(); // When the bubble spawns
-        this.animationDuration = 1000; // 1 second animation
-        this.isAnimating = true; // Flag for animation state
+        this.spawnTime = Date.now();
+        this.animationDuration = 1000; // 1 second
+        this.isAnimating = true;
     }
 
     draw() {
@@ -43,24 +44,22 @@ class Bubble {
         ctx.closePath();
     }
 
-    update() {
+    update(otherBubbles) {
         // Spawn animation: 0% → 110% → 100% over 1 second
         if (this.isAnimating) {
             const elapsed = Date.now() - this.spawnTime;
             const progress = Math.min(elapsed / this.animationDuration, 1);
-
             if (progress < 0.5) {
-                // First 0.5s: grow from 0% to 110%
-                this.radius = this.baseRadius * (progress * 2 * 1.1);
+                this.radius = this.currentBaseRadius * (progress * 2 * 1.1);
             } else {
-                // Last 0.5s: shrink from 110% to 100%
-                this.radius = this.baseRadius * (1.1 - (progress - 0.5) * 0.2);
+                this.radius = this.currentBaseRadius * (1.1 - (progress - 0.5) * 0.2);
             }
-
             if (progress >= 1) {
-                this.radius = this.baseRadius; // Lock at 100%
-                this.isAnimating = false; // Animation complete
+                this.radius = this.currentBaseRadius;
+                this.isAnimating = false;
             }
+        } else {
+            this.radius = this.currentBaseRadius;
         }
 
         this.x += this.velocity.x;
@@ -73,6 +72,40 @@ class Bubble {
         if (this.y + this.radius > canvas.height || this.y - this.radius < 0) {
             this.velocity.y = -this.velocity.y;
         }
+
+        // Prevent overlap with other bubbles
+        otherBubbles.forEach(other => {
+            if (other !== this) {
+                const dx = other.x - this.x;
+                const dy = other.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const minDistance = this.radius + other.radius;
+                if (distance < minDistance && distance > 0) {
+                    // Push bubbles apart
+                    const overlap = (minDistance - distance) / 2;
+                    const angle = Math.atan2(dy, dx);
+                    this.x -= overlap * Math.cos(angle);
+                    this.y -= overlap * Math.sin(angle);
+                    other.x += overlap * Math.cos(angle);
+                    other.y += overlap * Math.sin(angle);
+                    // Adjust velocities to prevent sticking
+                    this.velocity.x -= 0.05 * Math.cos(angle);
+                    this.velocity.y -= 0.05 * Math.sin(angle);
+                    other.velocity.x += 0.05 * Math.cos(angle);
+                    other.velocity.y += 0.05 * Math.sin(angle);
+                }
+            }
+        });
+
+        // Gentle force toward edges to encourage spread
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const dx = this.x - centerX;
+        const dy = this.y - centerY;
+        const distanceFromCenter = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = 0.1 / distanceFromCenter; // Weaker as distance increases
+        this.velocity.x += force * (dx / distanceFromCenter);
+        this.velocity.y += force * (dy / distanceFromCenter);
     }
 }
 
@@ -97,20 +130,40 @@ const bubbleTypes = {
 
 let bubbles = [];
 let lastTime = null;
+let lastMinute = null;
+
+function calculateScaleFactor(totalBubbles) {
+    const totalArea = canvas.width * canvas.height;
+    // Inverse scaling: fewer bubbles = larger, more bubbles = smaller
+    // Base area assumes max bubbles (130) at a reference scale
+    const referenceBubbles = 130; // Max possible (12 + 59 + 59)
+    const baseScale = Math.sqrt(totalArea / (referenceBubbles * 1000));
+    // Adjust scale inversely with bubble count
+    return baseScale * Math.sqrt(referenceBubbles / Math.max(totalBubbles, 1));
+}
+
+function updateBubbleSizes() {
+    const totalBubbles = bubbles.length;
+    const scaleFactor = calculateScaleFactor(totalBubbles);
+    bubbles.forEach(bubble => {
+        bubble.currentBaseRadius = bubbleTypes[bubble.type].baseRadius * scaleFactor;
+        if (!bubble.isAnimating) {
+            bubble.radius = bubble.currentBaseRadius;
+        }
+    });
+}
 
 function initializeBubbles() {
     const now = new Date();
     const hours = now.getHours() % 12 || 12;
     const minutes = now.getMinutes();
     const seconds = now.getSeconds();
+    lastMinute = minutes;
 
-    const totalArea = canvas.width * canvas.height;
-    const maxBubbles = bubbleTypes.hours.maxCount + 
-                      bubbleTypes.minutes.maxCount + 
-                      bubbleTypes.seconds.maxCount;
-    const scaleFactor = Math.sqrt(totalArea / (maxBubbles * 1000));
+    const totalBubbles = hours + minutes + seconds;
+    const scaleFactor = calculateScaleFactor(totalBubbles);
 
-    // Initial bubbles start at full size (no animation)
+    // Initial bubbles start at full size
     for (let i = 0; i < hours; i++) {
         const bubble = new Bubble(
             Math.random() * canvas.width,
@@ -119,7 +172,8 @@ function initializeBubbles() {
             bubbleTypes.hours.color,
             'hours'
         );
-        bubble.radius = bubble.baseRadius;
+        bubble.currentBaseRadius = bubbleTypes.hours.baseRadius * scaleFactor;
+        bubble.radius = bubble.currentBaseRadius;
         bubble.isAnimating = false;
         bubbles.push(bubble);
     }
@@ -131,7 +185,8 @@ function initializeBubbles() {
             bubbleTypes.minutes.color,
             'minutes'
         );
-        bubble.radius = bubble.baseRadius;
+        bubble.currentBaseRadius = bubbleTypes.minutes.baseRadius * scaleFactor;
+        bubble.radius = bubble.currentBaseRadius;
         bubble.isAnimating = false;
         bubbles.push(bubble);
     }
@@ -143,7 +198,8 @@ function initializeBubbles() {
             bubbleTypes.seconds.color,
             'seconds'
         );
-        bubble.radius = bubble.baseRadius;
+        bubble.currentBaseRadius = bubbleTypes.seconds.baseRadius * scaleFactor;
+        bubble.radius = bubble.currentBaseRadius;
         bubble.isAnimating = false;
         bubbles.push(bubble);
     }
@@ -155,11 +211,15 @@ function updateBubbles() {
     const now = new Date();
     if (!lastTime) return;
 
-    const totalArea = canvas.width * canvas.height;
-    const maxBubbles = bubbleTypes.hours.maxCount + 
-                      bubbleTypes.minutes.maxCount + 
-                      bubbleTypes.seconds.maxCount;
-    const scaleFactor = Math.sqrt(totalArea / (maxBubbles * 1000));
+    const minutes = now.getMinutes();
+    const totalBubbles = bubbles.length;
+    const scaleFactor = calculateScaleFactor(totalBubbles);
+
+    // Update sizes every minute
+    if (minutes !== lastMinute) {
+        updateBubbleSizes();
+        lastMinute = minutes;
+    }
 
     const timeDiff = (now - lastTime) / 1000;
     if (timeDiff >= 1) {
@@ -167,37 +227,44 @@ function updateBubbles() {
         
         for (let i = 0; i < secondsToAdd; i++) {
             if (bubbles.filter(b => b.type === 'seconds').length < bubbleTypes.seconds.maxCount) {
-                bubbles.push(new Bubble(
+                const bubble = new Bubble(
                     Math.random() * canvas.width,
                     Math.random() * canvas.height,
                     bubbleTypes.seconds.baseRadius * scaleFactor,
                     bubbleTypes.seconds.color,
                     'seconds'
-                ));
+                );
+                bubble.currentBaseRadius = bubbleTypes.seconds.baseRadius * scaleFactor;
+                bubbles.push(bubble);
             } else {
                 bubbles = bubbles.filter(b => b.type !== 'seconds');
                 if (bubbles.filter(b => b.type === 'minutes').length < bubbleTypes.minutes.maxCount) {
-                    bubbles.push(new Bubble(
+                    const bubble = new Bubble(
                         Math.random() * canvas.width,
                         Math.random() * canvas.height,
                         bubbleTypes.minutes.baseRadius * scaleFactor,
                         bubbleTypes.minutes.color,
                         'minutes'
-                    ));
+                    );
+                    bubble.currentBaseRadius = bubbleTypes.minutes.baseRadius * scaleFactor;
+                    bubbles.push(bubble);
                 } else {
                     bubbles = bubbles.filter(b => b.type !== 'minutes');
                     if (bubbles.filter(b => b.type === 'hours').length < bubbleTypes.hours.maxCount) {
-                        bubbles.push(new Bubble(
+                        const bubble = new Bubble(
                             Math.random() * canvas.width,
                             Math.random() * canvas.height,
                             bubbleTypes.hours.baseRadius * scaleFactor,
                             bubbleTypes.hours.color,
                             'hours'
-                        ));
+                        );
+                        bubble.currentBaseRadius = bubbleTypes.hours.baseRadius * scaleFactor;
+                        bubbles.push(bubble);
                     } else {
                         bubbles = bubbles.filter(b => b.type !== 'hours');
                     }
                 }
+                updateBubbleSizes();
             }
         }
         lastTime = new Date(now.getTime() - (now.getTime() % 1000));
@@ -209,7 +276,7 @@ function animate() {
     
     updateBubbles();
     bubbles.forEach(bubble => {
-        bubble.update();
+        bubble.update(bubbles); // Pass all bubbles for collision detection
         bubble.draw();
     });
 
