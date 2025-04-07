@@ -73,23 +73,21 @@ const bubbleTypes = {
 };
 
 let bubbles = [];
+let lastTime = null;
 
-function createBubbles() {
+function initializeBubbles() {
     const now = new Date();
     const hours = now.getHours() % 12 || 12;
     const minutes = now.getMinutes();
     const seconds = now.getSeconds();
 
-    bubbles = [];
-
-    // Calculate scaling factor based on screen size and max possible bubbles
     const totalArea = canvas.width * canvas.height;
     const maxBubbles = bubbleTypes.hours.maxCount + 
                       bubbleTypes.minutes.maxCount + 
                       bubbleTypes.seconds.maxCount;
     const scaleFactor = Math.sqrt(totalArea / (maxBubbles * 1000));
 
-    // Create hour bubbles
+    // Initial hour bubbles
     for (let i = 0; i < hours; i++) {
         bubbles.push(new Bubble(
             Math.random() * canvas.width,
@@ -100,7 +98,7 @@ function createBubbles() {
         ));
     }
 
-    // Create minute bubbles
+    // Initial minute bubbles
     for (let i = 0; i < minutes; i++) {
         bubbles.push(new Bubble(
             Math.random() * canvas.width,
@@ -111,7 +109,7 @@ function createBubbles() {
         ));
     }
 
-    // Create second bubbles
+    // Initial second bubbles
     for (let i = 0; i < seconds; i++) {
         bubbles.push(new Bubble(
             Math.random() * canvas.width,
@@ -121,11 +119,71 @@ function createBubbles() {
             'seconds'
         ));
     }
+
+    lastTime = now;
+}
+
+function updateBubbles() {
+    const now = new Date();
+    if (!lastTime) return;
+
+    const totalArea = canvas.width * canvas.height;
+    const maxBubbles = bubbleTypes.hours.maxCount + 
+                      bubbleTypes.minutes.maxCount + 
+                      bubbleTypes.seconds.maxCount;
+    const scaleFactor = Math.sqrt(totalArea / (maxBubbles * 1000));
+
+    const timeDiff = (now - lastTime) / 1000; // Difference in seconds
+    if (timeDiff >= 1) {
+        const secondsToAdd = Math.floor(timeDiff);
+        
+        // Add seconds bubbles
+        for (let i = 0; i < secondsToAdd; i++) {
+            if (bubbles.filter(b => b.type === 'seconds').length < bubbleTypes.seconds.maxCount) {
+                bubbles.push(new Bubble(
+                    Math.random() * canvas.width,
+                    Math.random() * canvas.height,
+                    bubbleTypes.seconds.baseRadius * scaleFactor,
+                    bubbleTypes.seconds.color,
+                    'seconds'
+                ));
+            } else {
+                // Reset seconds and add minute
+                bubbles = bubbles.filter(b => b.type !== 'seconds');
+                if (bubbles.filter(b => b.type === 'minutes').length < bubbleTypes.minutes.maxCount) {
+                    bubbles.push(new Bubble(
+                        Math.random() * canvas.width,
+                        Math.random() * canvas.height,
+                        bubbleTypes.minutes.baseRadius * scaleFactor,
+                        bubbleTypes.minutes.color,
+                        'minutes'
+                    ));
+                } else {
+                    // Reset minutes and add hour
+                    bubbles = bubbles.filter(b => b.type !== 'minutes');
+                    if (bubbles.filter(b => b.type === 'hours').length < bubbleTypes.hours.maxCount) {
+                        bubbles.push(new Bubble(
+                            Math.random() * canvas.width,
+                            Math.random() * canvas.height,
+                            bubbleTypes.hours.baseRadius * scaleFactor,
+                            bubbleTypes.hours.color,
+                            'hours'
+                        ));
+                    } else {
+                        // Reset hours (midnight/noon)
+                        bubbles = bubbles.filter(b => b.type !== 'hours');
+                    }
+                }
+            }
+        }
+        lastTime = new Date(now.getTime() - (now.getTime() % 1000));
+    }
 }
 
 function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
+    updateBubbles();
     bubbles.forEach(bubble => {
         bubble.update();
         bubble.draw();
@@ -134,11 +192,8 @@ function animate() {
     requestAnimationFrame(animate);
 }
 
-// Update bubbles every second
-setInterval(createBubbles, 1000);
-
 // Initial setup
-createBubbles();
+initializeBubbles();
 animate();
 
 // Prevent double tap zoom
