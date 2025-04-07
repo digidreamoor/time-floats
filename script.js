@@ -15,13 +15,17 @@ class Bubble {
     constructor(x, y, radius, color, type) {
         this.x = x;
         this.y = y;
-        this.radius = radius;
+        this.baseRadius = radius; // Store the target radius
+        this.radius = 0; // Start at 0 for animation
         this.color = color;
         this.type = type;
         this.velocity = {
             x: (Math.random() - 0.5) * 0.5,
             y: (Math.random() - 0.5) * 0.5
         };
+        this.spawnTime = Date.now(); // Timestamp for animation
+        this.animationDuration = 1000; // 1 second in milliseconds
+        this.isAnimating = true;
     }
 
     draw() {
@@ -40,6 +44,25 @@ class Bubble {
     }
 
     update() {
+        // Handle spawn animation
+        if (this.isAnimating) {
+            const elapsed = Date.now() - this.spawnTime;
+            const progress = Math.min(elapsed / this.animationDuration, 1);
+
+            if (progress < 0.5) {
+                // Grow from 0% to 110% in first half
+                this.radius = this.baseRadius * (progress * 2 * 1.1);
+            } else {
+                // Shrink from 110% to 100% in second half
+                this.radius = this.baseRadius * (1.1 - (progress - 0.5) * 0.2);
+            }
+
+            if (progress >= 1) {
+                this.radius = this.baseRadius; // Ensure it ends at 100%
+                this.isAnimating = false; // Stop animation
+            }
+        }
+
         this.x += this.velocity.x;
         this.y += this.velocity.y;
 
@@ -87,122 +110,33 @@ function initializeBubbles() {
                       bubbleTypes.seconds.maxCount;
     const scaleFactor = Math.sqrt(totalArea / (maxBubbles * 1000));
 
-    // Initial hour bubbles
+    // Initial hour bubbles (no animation for initial set)
     for (let i = 0; i < hours; i++) {
-        bubbles.push(new Bubble(
+        const bubble = new Bubble(
             Math.random() * canvas.width,
             Math.random() * canvas.height,
             bubbleTypes.hours.baseRadius * scaleFactor,
             bubbleTypes.hours.color,
             'hours'
-        ));
+        );
+        bubble.radius = bubble.baseRadius; // Set directly to full size
+        bubble.isAnimating = false; // Skip animation
+        bubbles.push(bubble);
     }
 
-    // Initial minute bubbles
+    // Initial minute bubbles (no animation for initial set)
     for (let i = 0; i < minutes; i++) {
-        bubbles.push(new Bubble(
+        const bubble = new Bubble(
             Math.random() * canvas.width,
             Math.random() * canvas.height,
             bubbleTypes.minutes.baseRadius * scaleFactor,
             bubbleTypes.minutes.color,
             'minutes'
-        ));
+        );
+        bubble.radius = bubble.baseRadius;
+        bubble.isAnimating = false;
+        bubbles.push(bubble);
     }
 
-    // Initial second bubbles
-    for (let i = 0; i < seconds; i++) {
-        bubbles.push(new Bubble(
-            Math.random() * canvas.width,
-            Math.random() * canvas.height,
-            bubbleTypes.seconds.baseRadius * scaleFactor,
-            bubbleTypes.seconds.color,
-            'seconds'
-        ));
-    }
-
-    lastTime = now;
-}
-
-function updateBubbles() {
-    const now = new Date();
-    if (!lastTime) return;
-
-    const totalArea = canvas.width * canvas.height;
-    const maxBubbles = bubbleTypes.hours.maxCount + 
-                      bubbleTypes.minutes.maxCount + 
-                      bubbleTypes.seconds.maxCount;
-    const scaleFactor = Math.sqrt(totalArea / (maxBubbles * 1000));
-
-    const timeDiff = (now - lastTime) / 1000; // Difference in seconds
-    if (timeDiff >= 1) {
-        const secondsToAdd = Math.floor(timeDiff);
-        
-        // Add seconds bubbles
-        for (let i = 0; i < secondsToAdd; i++) {
-            if (bubbles.filter(b => b.type === 'seconds').length < bubbleTypes.seconds.maxCount) {
-                bubbles.push(new Bubble(
-                    Math.random() * canvas.width,
-                    Math.random() * canvas.height,
-                    bubbleTypes.seconds.baseRadius * scaleFactor,
-                    bubbleTypes.seconds.color,
-                    'seconds'
-                ));
-            } else {
-                // Reset seconds and add minute
-                bubbles = bubbles.filter(b => b.type !== 'seconds');
-                if (bubbles.filter(b => b.type === 'minutes').length < bubbleTypes.minutes.maxCount) {
-                    bubbles.push(new Bubble(
-                        Math.random() * canvas.width,
-                        Math.random() * canvas.height,
-                        bubbleTypes.minutes.baseRadius * scaleFactor,
-                        bubbleTypes.minutes.color,
-                        'minutes'
-                    ));
-                } else {
-                    // Reset minutes and add hour
-                    bubbles = bubbles.filter(b => b.type !== 'minutes');
-                    if (bubbles.filter(b => b.type === 'hours').length < bubbleTypes.hours.maxCount) {
-                        bubbles.push(new Bubble(
-                            Math.random() * canvas.width,
-                            Math.random() * canvas.height,
-                            bubbleTypes.hours.baseRadius * scaleFactor,
-                            bubbleTypes.hours.color,
-                            'hours'
-                        ));
-                    } else {
-                        // Reset hours (midnight/noon)
-                        bubbles = bubbles.filter(b => b.type !== 'hours');
-                    }
-                }
-            }
-        }
-        lastTime = new Date(now.getTime() - (now.getTime() % 1000));
-    }
-}
-
-function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    updateBubbles();
-    bubbles.forEach(bubble => {
-        bubble.update();
-        bubble.draw();
-    });
-
-    requestAnimationFrame(animate);
-}
-
-// Initial setup
-initializeBubbles();
-animate();
-
-// Prevent double tap zoom
-document.addEventListener('touchstart', function(e) {
-    if (e.touches.length > 1) {
-        e.preventDefault();
-    }
-}, { passive: false });
-
-document.addEventListener('touchend', function(e) {
-    e.preventDefault();
-}, { passive: false });
+    // Initial second bubbles (no animation for initial set)
+    for (let i = 0; i < seconds
